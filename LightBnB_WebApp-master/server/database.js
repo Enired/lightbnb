@@ -114,25 +114,73 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 10) {
-  const values = [`${limit}`];
+  const queryParams = [];
   
-  return pool.query(`SELECT *
+  let query = `
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
   FROM properties
-  LIMIT $1
-  `,
-  values)
-  .then(results =>{
-    return results.rows
-  })
-  .catch(err => console.error(err.message));
+  JOIN property_reviews ON property_reviews.property_id = properties.id
+  `;
 
-
-
-  const limitedProperties = {};
-  for (let i = 1; i <= limit; i++) {
-    limitedProperties[i] = properties[i];
+  if(options.city){
+    queryParams.push(`%${options.city}%`);
+    query += `WHERE city LIKE $${queryParams.length} `;
   }
-  return Promise.resolve(limitedProperties);
+  
+  if(options.owner_id){
+    queryParams.push(`${options.owner_id}`);
+    if(queryParams.length === 1){
+      query += `WHERE owner_id = $${queryParams.length}`;
+    }
+    else{
+      query += `AND WHERE owner_id = $${queryParams.length}`;
+    }
+  }
+  
+  if(options.minimum_price_per_night && options.maximum_price_per_night){
+    queryParams.push(`${options.minimum_price_per_night *100}`, `${options.maximum_price_per_night * 100}`);
+    if(queryParams.length === 2){
+      query += `WHERE cost_per_night > $${queryParams.length - 1} AND cost_per_night < $${queryParams.length} `;
+    }
+    else{
+      query += `AND cost_per_night > $${queryParams.length - 1} AND cost_per_night < $${queryParams.length} `;
+    }
+  }
+
+  if(options.minimum_rating){
+    queryParams.push(`${options.minimum_rating}`);
+    if(queryParams.length === 1){
+      query += `WHERE rating >= $${queryParams.length}`;
+    }
+    else{
+      query += `AND rating >= $${queryParams.length}`;
+    }
+  }
+  
+  queryParams.push(limit);
+  query += `
+  GROUP BY properties.id
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length}
+  `
+
+  console.log(query, queryParams)
+
+  return pool.query(query, queryParams).then(results => results.rows);
+
+
+
+  // return pool.query(`SELECT *
+  // FROM properties
+  // LIMIT $1
+  // `,
+  // values)
+  // .then(results =>{
+  //   return results.rows
+  // })
+  // .catch(err => console.error(err.message));
+
+
 }
 exports.getAllProperties = getAllProperties;
 
